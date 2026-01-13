@@ -44,8 +44,6 @@ config :req_llm, :anthropic,
 ### Deterministic Assertions
 - `contains` / `not_contains`: Check for specific text
 - `is_json`: Validate JSON format
-- `no_pii`: Detect personally identifiable information
-- `is_refusal`: Check if the LLM refused a request
 - `regex`: Pattern matching
 
 ### LLM-as-Judge Assertions
@@ -53,6 +51,9 @@ config :req_llm, :anthropic,
 - `relevant`: Does it answer the question?
 - `hallucination`: Does it contain made-up facts?
 - `correctness`: Is the answer correct?
+- `pii`: Detect personally identifiable information
+- `toxicity`: Detect hostile or abusive content
+- `refusal`: Detect refusal responses
 
 ## Pre-built Scenarios
 

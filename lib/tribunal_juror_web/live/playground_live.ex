@@ -3,8 +3,8 @@ defmodule TribunalJurorWeb.PlaygroundLive do
 
   alias Tribunal.TestCase
 
-  @deterministic_evals [:contains, :not_contains, :is_json, :no_pii, :is_refusal, :regex]
-  @judge_evals [:faithful, :relevant, :hallucination, :correctness]
+  @deterministic_evals [:contains, :not_contains, :is_json, :regex]
+  @judge_evals [:faithful, :relevant, :hallucination, :correctness, :pii, :toxicity, :refusal]
 
   @impl true
   def mount(_params, _session, socket) do

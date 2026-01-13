@@ -38,7 +38,7 @@ defmodule TribunalJurorWeb.HomeLive do
           <.feature_card
             icon="hero-bolt"
             title="Deterministic"
-            description="Fast, no-LLM checks: regex, JSON validation, PII detection, contains, length limits."
+            description="Fast, no-LLM checks: regex, JSON validation, contains, length limits."
           />
           <.feature_card
             icon="hero-cpu-chip"
@@ -71,12 +71,6 @@ defmodule TribunalJurorWeb.HomeLive do
                   <code class="text-xs bg-base-300 px-1 rounded">is_json</code> - Valid JSON output
                 </li>
                 <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">no_pii</code> - No personal info
-                </li>
-                <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">is_refusal</code> - Detects refusals
-                </li>
-                <li>
                   <code class="text-xs bg-base-300 px-1 rounded">max_tokens</code> - Token limit
                 </li>
                 <li>
@@ -103,6 +97,9 @@ defmodule TribunalJurorWeb.HomeLive do
                   <code class="text-xs bg-base-300 px-1 rounded">correctness</code> - Matches expected
                 </li>
                 <li>
+                  <code class="text-xs bg-base-300 px-1 rounded">pii</code> - Personal info detection
+                </li>
+                <li>
                   <code class="text-xs bg-base-300 px-1 rounded">toxicity</code> - Harmful content
                 </li>
                 <li>
@@ -110,6 +107,9 @@ defmodule TribunalJurorWeb.HomeLive do
                 </li>
                 <li>
                   <code class="text-xs bg-base-300 px-1 rounded">jailbreak</code> - Attack detection
+                </li>
+                <li>
+                  <code class="text-xs bg-base-300 px-1 rounded">refusal</code> - Detects refusals
                 </li>
               </ul>
             </div>
