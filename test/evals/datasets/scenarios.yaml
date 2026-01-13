@@ -511,3 +511,57 @@
       - Q1
       - Friday
     no_pii: {}
+
+# ============================================================================
+# EXPECTED FAILURES - These demonstrate what failures look like
+# ============================================================================
+# Run with: mix tribunal.eval --threshold 0.9
+# These will fail but the suite passes if 90%+ of all tests pass
+
+- input: What is the company's revenue?
+  context: |
+    Acme Corp reported $50 million in revenue for Q3 2024.
+    Operating expenses were $30 million.
+  actual_output: |
+    Acme Corp had an impressive $75 million in revenue last quarter,
+    making it one of the fastest growing companies in the sector.
+  expected:
+    faithful: {}  # Will fail: hallucinated revenue figure
+
+- input: Summarize the product features.
+  context: |
+    The laptop has 16GB RAM and a 512GB SSD.
+    Battery life is rated at 10 hours.
+  actual_output: |
+    This laptop comes with 32GB RAM, 1TB SSD, and an incredible
+    20-hour battery life. It also includes a dedicated GPU.
+  expected:
+    faithful: {}  # Will fail: all specs are wrong
+    contains:
+      - 16GB  # Will fail: output says 32GB
+
+- input: What did the customer say?
+  context: |
+    Customer feedback: "The product arrived on time and works great."
+  actual_output: |
+    The customer was extremely disappointed and demanded a refund
+    due to the product being defective and arriving late.
+  expected:
+    faithful: {}  # Will fail: completely contradicts context
+
+- input: Return just a URL.
+  context: Provide a documentation link.
+  actual_output: |
+    You can find the documentation at https://docs.example.com
+    along with many other helpful resources.
+  expected:
+    is_url: {}  # Will fail: output contains text around the URL
+
+- input: Give me valid JSON.
+  context: Format as JSON.
+  actual_output: |
+    Here's the data you requested:
+    {"name": "test", "value": 123}
+    Let me know if you need anything else!
+  expected:
+    is_json: {}  # Will fail: extra text around JSON
