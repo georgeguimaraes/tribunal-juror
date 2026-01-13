@@ -33,8 +33,7 @@ For LLM-as-judge evaluations, you'll need to configure your LLM provider. Create
 ```elixir
 import Config
 
-config :tribunal,
-  llm_client: {ReqLLM, model: "anthropic:claude-sonnet-4-20250514"}
+config :tribunal, llm: "anthropic:claude-sonnet-4-20250514"
 
 config :req_llm, :anthropic,
   api_key: "your-api-key"
