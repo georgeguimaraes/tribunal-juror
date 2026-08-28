@@ -52,8 +52,11 @@ config :phoenix, :json_library, Jason
 
 # Tribunal LLM-as-judge configuration
 config :tribunal,
-  llm: "zai:glm-4.7",
+  llm: %{provider: :zai, id: "glm-5.3-flash"},
   verbose: true
+
+config :tribunal_juror,
+  agent_model: "zai:glm-4.7"
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

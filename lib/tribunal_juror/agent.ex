@@ -6,8 +6,8 @@ defmodule TribunalJuror.Agent do
 
       mix tribunal.eval --provider TribunalJuror.Agent.query
 
-  The agent uses the model configured in `:tribunal, :llm` or defaults to
-  Claude Haiku. It answers questions based on provided context.
+  The agent uses the model configured in `:tribunal_juror, :agent_model` or
+  defaults to Claude Haiku. It answers questions based on provided context.
   """
 
   alias Tribunal.TestCase
@@ -25,7 +25,7 @@ defmodule TribunalJuror.Agent do
   end
 
   defp generate(input, context) do
-    model = Application.get_env(:tribunal, :llm, @default_model)
+    model = Application.get_env(:tribunal_juror, :agent_model, @default_model)
 
     messages =
       if context do
