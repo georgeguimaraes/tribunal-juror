@@ -4,7 +4,7 @@ defmodule TribunalJuror.Agent do
 
   Use as a provider for `mix tribunal.eval`:
 
-      mix tribunal.eval --provider TribunalJuror.Agent:query
+      mix tribunal.eval --provider TribunalJuror.Agent.query
 
   The agent uses the model configured in `:tribunal, :llm` or defaults to
   Claude Haiku. It answers questions based on provided context.
@@ -46,26 +46,13 @@ defmodule TribunalJuror.Agent do
       end
 
     case ReqLLM.generate_text(model, messages, max_tokens: 1024) do
-      {:ok, response} ->
-        extract_text(response.message.content)
-
-      {:error, error} ->
-        "Error: #{inspect(error)}"
-    end
-  end
-
-  defp extract_text(content) do
-    content
-    |> Enum.find(fn part -> part.type == :text end)
-    |> case do
-      nil -> ""
-      part -> part.text
+      {:ok, response} -> ReqLLM.Response.text(response)
+      {:error, error} -> raise "LLM request failed: #{inspect(error)}"
     end
   end
 
   defp format_context(context) when is_list(context), do: Enum.join(context, "\n")
   defp format_context(context) when is_binary(context), do: context
-  defp format_context(nil), do: ""
 
   defp system_prompt do
     """
