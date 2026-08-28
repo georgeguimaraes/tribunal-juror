@@ -37,6 +37,46 @@ mix phx.server
 
 The sample agent used by `mix tribunal.eval` stays on GLM-4.7 so the system being evaluated and its judge can be configured independently.
 
+## Evaluation modes
+
+Use `tribunal_assert` inside a normal ExUnit test when every sample should call your application again:
+
+```elixir
+defmodule MyApp.ResponseEvalTest do
+  use ExUnit.Case
+  use Tribunal.ExUnit
+
+  test "response stays relevant" do
+    question = "How do I reset my password?"
+
+    tribunal_assert fn -> MyApp.Support.reply(question) end,
+      input: question,
+      repeat: 3,
+      pass_rule: :majority,
+      expected: [relevant: []]
+  end
+end
+```
+
+Use `tribunal_dataset` when a dataset should generate one native ExUnit test per row:
+
+```elixir
+tribunal_dataset "test/evals/datasets/support.yaml",
+  provider: {MyApp.Support, :reply},
+  repeat: 3,
+  pass_rule: :majority
+```
+
+Use the Mix task for batch evaluation, reports, and suite-wide gates. Juror includes datasets and a sample provider for this mode:
+
+```bash
+mix tribunal.eval test/evals/datasets/agent_evals.yaml \
+  --provider TribunalJuror.Agent.query \
+  --repeat 3 \
+  --pass-rule majority \
+  --threshold 0.8
+```
+
 ## Features
 
 ### Deterministic Assertions
