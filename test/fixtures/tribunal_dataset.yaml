@@ -1,0 +1,8 @@
+- input:
+    query: hello
+    locale: en
+  evaluation_input: hello
+  metadata:
+    name: structured input smoke test
+  expected:
+    contains: hello
