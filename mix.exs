@@ -63,7 +63,7 @@ defmodule TribunalJuror.MixProject do
       {:bandit, "~> 1.12.5"},
 
       # Tribunal LLM evaluation
-      {:tribunal, github: "georgeguimaraes/tribunal", branch: "feat/evaluation-v2"},
+      {:tribunal, github: "georgeguimaraes/tribunal"},
       {:req_llm, "~> 1.2"}
     ]
   end
