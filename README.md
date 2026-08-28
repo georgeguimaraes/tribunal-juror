@@ -28,16 +28,14 @@ Visit [localhost:4000](http://localhost:4000) to explore the app.
 
 ## Configuration
 
-For LLM-as-judge evaluations, you'll need to configure your LLM provider. Create a `config/dev.secret.exs` file:
+The playground uses GLM-5.3-Flash as its judge. Export a Z.AI API key before starting the server:
 
-```elixir
-import Config
-
-config :tribunal, llm: "anthropic:claude-sonnet-4-20250514"
-
-config :req_llm, :anthropic,
-  api_key: "your-api-key"
+```bash
+export ZAI_API_KEY="your-api-key"
+mix phx.server
 ```
+
+The sample agent used by `mix tribunal.eval` stays on GLM-4.7 so the system being evaluated and its judge can be configured independently.
 
 ## Features
 

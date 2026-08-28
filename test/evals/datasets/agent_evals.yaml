@@ -1,5 +1,5 @@
 # Agent Evaluation Dataset
-# Run with: mix tribunal.eval --provider TribunalJuror.Agent:query
+# Run with: mix tribunal.eval --provider TribunalJuror.Agent.query
 #
 # These test cases don't have pre-computed outputs. The agent generates
 # responses at eval time, and Tribunal checks them against the assertions.

@@ -5,6 +5,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
 
   @deterministic_evals [:contains, :not_contains, :is_json, :regex]
   @judge_evals [:faithful, :relevant, :hallucination, :correctness, :pii, :toxicity, :refusal]
+  @evaluation_timeout 45_000
 
   @impl true
   def mount(_params, _session, socket) do
@@ -13,11 +14,15 @@ defmodule TribunalJurorWeb.PlaygroundLive do
      |> assign(:context, "")
      |> assign(:response, "")
      |> assign(:query, "")
+     |> assign(:expected_output, "")
      |> assign(:contains_value, "")
+     |> assign(:regex_value, "")
      |> assign(:selected_evals, MapSet.new([:contains]))
      |> assign(:results, nil)
      |> assign(:running, false)
      |> assign(:error, nil)
+     |> assign(:evaluation_ref, nil)
+     |> assign(:evaluation_timer, nil)
      |> assign(:deterministic_evals, @deterministic_evals)
      |> assign(:judge_evals, @judge_evals)}
   end
@@ -31,13 +36,20 @@ defmodule TribunalJurorWeb.PlaygroundLive do
             {:noreply, socket}
 
           scenario ->
+            evaluation_opts = scenario.evaluation_opts
+
             {:noreply,
              socket
+             |> cancel_evaluation()
              |> assign(:context, String.trim(scenario.context))
              |> assign(:response, String.trim(scenario.response))
              |> assign(:query, Map.get(scenario, :query, ""))
+             |> assign(:expected_output, "")
+             |> assign(:contains_value, evaluation_value(evaluation_opts, :contains))
+             |> assign(:regex_value, evaluation_value(evaluation_opts, :regex))
              |> assign(:selected_evals, MapSet.new(scenario.evaluations))
-             |> assign(:results, nil)}
+             |> assign(:results, nil)
+             |> assign(:error, nil)}
         end
 
       _ ->
@@ -71,15 +83,49 @@ defmodule TribunalJurorWeb.PlaygroundLive do
       context: context,
       response: response,
       query: query,
+      expected_output: expected_output,
       contains_value: contains_value,
+      regex_value: regex_value,
       selected_evals: evals
     } = socket.assigns
 
-    if response == "" do
-      {:noreply, assign(socket, :error, "Please enter a response to evaluate")}
-    else
-      send(self(), {:run_evals, context, response, query, contains_value, evals})
-      {:noreply, socket |> assign(:running, true) |> assign(:error, nil) |> assign(:results, nil)}
+    case validate_run(
+           context,
+           response,
+           query,
+           expected_output,
+           contains_value,
+           regex_value,
+           evals
+         ) do
+      :ok ->
+        evaluation_ref = make_ref()
+
+        timer =
+          Process.send_after(self(), {:evaluation_timeout, evaluation_ref}, @evaluation_timeout)
+
+        test_case = %TestCase{
+          input: query,
+          actual_output: response,
+          expected_output: blank_to_nil(expected_output),
+          context: blank_to_nil(context)
+        }
+
+        assertions = build_assertions(evals, query, contains_value, regex_value)
+
+        {:noreply,
+         socket
+         |> assign(:running, true)
+         |> assign(:error, nil)
+         |> assign(:results, nil)
+         |> assign(:evaluation_ref, evaluation_ref)
+         |> assign(:evaluation_timer, timer)
+         |> start_async({:run_evals, evaluation_ref}, fn ->
+           Tribunal.evaluate(test_case, assertions)
+         end)}
+
+      {:error, message} ->
+        {:noreply, assign(socket, :error, message)}
     end
   end
 
@@ -87,51 +133,150 @@ defmodule TribunalJurorWeb.PlaygroundLive do
   def handle_event("clear", _params, socket) do
     {:noreply,
      socket
+     |> cancel_evaluation()
      |> assign(:context, "")
      |> assign(:response, "")
      |> assign(:query, "")
+     |> assign(:expected_output, "")
      |> assign(:contains_value, "")
+     |> assign(:regex_value, "")
      |> assign(:results, nil)
      |> assign(:error, nil)}
   end
 
   @impl true
-  def handle_info({:run_evals, context, response, query, contains_value, evals}, socket) do
-    test_case = %TestCase{
-      input: query,
-      actual_output: response,
-      context: if(context != "", do: context, else: nil)
-    }
-
-    results =
-      evals
-      |> Enum.map(fn eval ->
-        opts = build_opts(eval, context, query, contains_value)
-        result = run_evaluation(eval, test_case, opts)
-        {eval, result}
-      end)
-      |> Map.new()
-
+  def handle_async(
+        {:run_evals, evaluation_ref},
+        {:ok, results},
+        %{assigns: %{evaluation_ref: evaluation_ref}} = socket
+      ) do
     {:noreply,
      socket
+     |> cancel_timer()
      |> assign(:results, results)
-     |> assign(:running, false)}
+     |> finish_evaluation()}
   end
 
-  defp build_opts(:contains, _context, _query, value), do: [value: value]
-  defp build_opts(:not_contains, _context, _query, value), do: [value: value]
-  defp build_opts(:faithful, _context, _query, _value), do: []
-  defp build_opts(:relevant, _context, query, _value), do: [query: query]
-  defp build_opts(:hallucination, _context, _query, _value), do: []
-  defp build_opts(:correctness, _context, query, _value), do: [query: query]
-  defp build_opts(_eval, _context, _query, _value), do: []
+  def handle_async(
+        {:run_evals, evaluation_ref},
+        {:exit, _reason},
+        %{assigns: %{evaluation_ref: evaluation_ref}} = socket
+      ) do
+    {:noreply,
+     socket
+     |> cancel_timer()
+     |> assign(:error, "Evaluation failed unexpectedly. Please try again.")
+     |> finish_evaluation()}
+  end
 
-  defp run_evaluation(eval, test_case, opts) do
-    try do
-      Tribunal.Assertions.evaluate(eval, test_case, opts)
-    rescue
-      e -> {:error, Exception.message(e)}
+  def handle_async({:run_evals, _evaluation_ref}, _result, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_info(
+        {:evaluation_timeout, evaluation_ref},
+        %{assigns: %{evaluation_ref: evaluation_ref}} = socket
+      ) do
+    {:noreply,
+     socket
+     |> cancel_async({:run_evals, evaluation_ref}, :timeout)
+     |> assign(:error, "Evaluation timed out after 45 seconds. Please try again.")
+     |> finish_evaluation()}
+  end
+
+  def handle_info({:evaluation_timeout, _evaluation_ref}, socket), do: {:noreply, socket}
+
+  defp validate_run(
+         context,
+         response,
+         query,
+         expected_output,
+         contains_value,
+         regex_value,
+         evals
+       ) do
+    cond do
+      String.trim(response) == "" ->
+        {:error, "Please enter a response to evaluate"}
+
+      MapSet.size(evals) == 0 ->
+        {:error, "Please select at least one evaluation"}
+
+      selected?(evals, [:contains, :not_contains]) and String.trim(contains_value) == "" ->
+        {:error, "Please enter text for Contains or Not Contains"}
+
+      MapSet.member?(evals, :regex) and String.trim(regex_value) == "" ->
+        {:error, "Please enter a regex pattern"}
+
+      MapSet.member?(evals, :correctness) and String.trim(expected_output) == "" ->
+        {:error, "Please enter an expected answer for Correctness"}
+
+      selected?(evals, [:relevant, :correctness]) and String.trim(query) == "" ->
+        {:error, "Please enter a query for Relevance or Correctness"}
+
+      selected?(evals, [:faithful, :hallucination]) and String.trim(context) == "" ->
+        {:error, "Please enter context for Faithfulness or Hallucination"}
+
+      true ->
+        :ok
     end
+  end
+
+  defp selected?(evals, names), do: Enum.any?(names, &MapSet.member?(evals, &1))
+
+  defp build_assertions(evals, query, contains_value, regex_value) do
+    Enum.map(evals, fn eval ->
+      {eval, build_opts(eval, query, contains_value, regex_value)}
+    end)
+  end
+
+  defp build_opts(eval, _query, contains_value, _regex_value)
+       when eval in [:contains, :not_contains],
+       do: [value: contains_value]
+
+  defp build_opts(:regex, _query, _contains_value, regex_value), do: [pattern: regex_value]
+
+  defp build_opts(eval, query, _contains_value, _regex_value)
+       when eval in [:relevant, :correctness],
+       do: [query: query]
+
+  defp build_opts(_eval, _query, _contains_value, _regex_value), do: []
+
+  defp evaluation_value(opts, eval) do
+    opts
+    |> Map.get(eval, [])
+    |> Keyword.get(:value, "")
+  end
+
+  defp blank_to_nil(value) do
+    case String.trim(value) do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp cancel_evaluation(%{assigns: %{evaluation_ref: nil}} = socket), do: socket
+
+  defp cancel_evaluation(socket) do
+    evaluation_ref = socket.assigns.evaluation_ref
+
+    socket
+    |> cancel_timer()
+    |> cancel_async({:run_evals, evaluation_ref})
+    |> finish_evaluation()
+  end
+
+  defp cancel_timer(%{assigns: %{evaluation_timer: nil}} = socket), do: socket
+
+  defp cancel_timer(socket) do
+    Process.cancel_timer(socket.assigns.evaluation_timer)
+    assign(socket, :evaluation_timer, nil)
+  end
+
+  defp finish_evaluation(socket) do
+    socket
+    |> assign(:running, false)
+    |> assign(:evaluation_ref, nil)
+    |> assign(:evaluation_timer, nil)
   end
 
   @impl true
@@ -199,6 +344,29 @@ defmodule TribunalJurorWeb.PlaygroundLive do
               </div>
             </div>
 
+            <div
+              :if={MapSet.member?(@selected_evals, :correctness)}
+              class="card bg-base-200 shadow-sm"
+            >
+              <div class="card-body p-5">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="font-semibold flex items-center gap-2">
+                    <.icon name="hero-check-circle" class="size-5 text-success" /> Expected Answer
+                  </h3>
+                  <span class="text-xs text-base-content/50 uppercase tracking-wide">
+                    For correctness
+                  </span>
+                </div>
+                <textarea
+                  id="expected-output-input"
+                  class="textarea bg-base-100 border-base-300 w-full h-28 font-mono text-sm leading-relaxed resize-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  placeholder="What should the correct answer say?"
+                  phx-blur="update_field"
+                  phx-value-field="expected_output"
+                >{@expected_output}</textarea>
+              </div>
+            </div>
+
             <div class="card bg-base-200 shadow-sm border-2 border-primary/20">
               <div class="card-body p-5">
                 <div class="flex items-center justify-between mb-3">
@@ -239,16 +407,41 @@ defmodule TribunalJurorWeb.PlaygroundLive do
                   }
                   class="mt-4 pt-4 border-t border-base-300"
                 >
-                  <label class="text-xs text-base-content/60 uppercase tracking-wide mb-2 block">
+                  <label
+                    for="contains-input"
+                    class="text-xs text-base-content/60 uppercase tracking-wide mb-2 block"
+                  >
                     Search value
                   </label>
                   <input
+                    id="contains-input"
                     type="text"
                     class="input input-sm bg-base-100 border-base-300 w-full"
                     placeholder="Text to search for..."
                     value={@contains_value}
                     phx-blur="update_field"
                     phx-value-field="contains_value"
+                  />
+                </div>
+
+                <div
+                  :if={MapSet.member?(@selected_evals, :regex)}
+                  class="mt-4 pt-4 border-t border-base-300"
+                >
+                  <label
+                    for="regex-input"
+                    class="text-xs text-base-content/60 uppercase tracking-wide mb-2 block"
+                  >
+                    Regex pattern
+                  </label>
+                  <input
+                    id="regex-input"
+                    type="text"
+                    class="input input-sm bg-base-100 border-base-300 w-full font-mono"
+                    placeholder="e.g. ^order-\\d+$"
+                    value={@regex_value}
+                    phx-blur="update_field"
+                    phx-value-field="regex_value"
                   />
                 </div>
               </div>
@@ -300,6 +493,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
       type="button"
       phx-click="toggle_eval"
       phx-value-eval={@eval}
+      aria-pressed={MapSet.member?(@selected, @eval)}
       class={[
         "px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150",
         if(MapSet.member?(@selected, @eval),
@@ -420,30 +614,53 @@ defmodule TribunalJurorWeb.PlaygroundLive do
 
   attr :result, :any, required: true
 
-  defp result_details(assigns) do
+  @doc false
+  def result_details(assigns) do
+    {status, details} = assigns.result
+    reason = result_reason(details)
+
+    assigns =
+      assigns
+      |> assign(:status, status)
+      |> assign(:score, result_score(details))
+      |> assign(:reason, reason)
+      |> assign(:long_reason, is_binary(reason) and String.length(reason) > 180)
+
     ~H"""
-    <div :if={match?({:pass, _}, @result)} class="text-sm text-base-content/60">
-      <span :if={is_map(elem(@result, 1)) && Map.has_key?(elem(@result, 1), :score)}>
-        Score: {Float.round(elem(@result, 1).score, 2)}
-      </span>
-      <span :if={is_map(elem(@result, 1)) && Map.has_key?(elem(@result, 1), :reason)}>
-        {elem(@result, 1).reason}
-      </span>
-      <span :if={
-        !is_map(elem(@result, 1)) or
-          (!Map.has_key?(elem(@result, 1), :score) and !Map.has_key?(elem(@result, 1), :reason))
-      }>
-        Check passed
-      </span>
-    </div>
-    <div :if={match?({:fail, _}, @result)} class="text-sm text-error/80">
-      {format_failure(elem(@result, 1))}
-    </div>
-    <div :if={match?({:error, _}, @result)} class="text-sm text-warning/80">
-      {elem(@result, 1)}
+    <div class="text-sm text-base-content/70">
+      <p class="font-medium text-base-content/80">
+        {result_summary(@status, @score)}
+      </p>
+      <p :if={@reason && !@long_reason} class="mt-2 whitespace-pre-wrap break-words">
+        {@reason}
+      </p>
+      <details :if={@reason && @long_reason} class="mt-2">
+        <summary class="cursor-pointer font-medium text-base-content/70 hover:text-base-content">
+          View explanation
+        </summary>
+        <p class="mt-2 whitespace-pre-wrap break-words">{@reason}</p>
+      </details>
     </div>
     """
   end
+
+  defp result_summary(:pass, nil), do: "Check passed"
+  defp result_summary(:pass, score), do: "Score: #{score}"
+  defp result_summary(:fail, nil), do: "Check failed"
+  defp result_summary(:fail, score), do: "Check failed · Score: #{score}"
+  defp result_summary(:error, _score), do: "Evaluation error"
+
+  defp result_score(%{score: score}) when is_number(score) do
+    score
+    |> Kernel.*(1.0)
+    |> Float.round(2)
+  end
+
+  defp result_score(_details), do: nil
+
+  defp result_reason(%{reason: reason}) when is_binary(reason), do: reason
+  defp result_reason(details) when is_binary(details), do: details
+  defp result_reason(_details), do: nil
 
   defp format_eval_name(eval) do
     eval
@@ -453,10 +670,4 @@ defmodule TribunalJurorWeb.PlaygroundLive do
     |> Enum.map(&String.capitalize/1)
     |> Enum.join(" ")
   end
-
-  defp format_failure(details) when is_map(details) do
-    Map.get(details, :reason, inspect(details))
-  end
-
-  defp format_failure(details), do: inspect(details)
 end
