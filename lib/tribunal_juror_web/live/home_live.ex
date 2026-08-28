@@ -134,7 +134,7 @@ defmodule TribunalJurorWeb.HomeLive do
           <div class="mockup-code text-sm" phx-no-curly-interpolation>
             <pre data-prefix="1"><code>defmodule MyApp.RAGEvalTest do</code></pre>
             <pre data-prefix="2"><code>  use ExUnit.Case</code></pre>
-            <pre data-prefix="3"><code>  use Tribunal.EvalCase</code></pre>
+            <pre data-prefix="3"><code>  use Tribunal.ExUnit</code></pre>
             <pre data-prefix="4"><code></code></pre>
             <pre data-prefix="5"><code>  @moduletag :eval</code></pre>
             <pre data-prefix="6"><code></code></pre>

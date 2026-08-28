@@ -515,8 +515,8 @@
 # ============================================================================
 # EXPECTED FAILURES - These demonstrate what failures look like
 # ============================================================================
-# Run with: mix tribunal.eval --threshold 0.9
-# These will fail but the suite passes if 90%+ of all tests pass
+# Run with: mix tribunal.eval --threshold 0.89
+# Five intentional failures leave the full 46-case suite at 89.13%
 
 - input: What is the company's revenue?
   context: |

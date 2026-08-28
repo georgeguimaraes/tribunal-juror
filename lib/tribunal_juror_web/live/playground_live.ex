@@ -521,13 +521,15 @@ defmodule TribunalJurorWeb.PlaygroundLive do
   attr :results, :map, required: true
 
   defp results_section(assigns) do
-    passes = Enum.count(assigns.results, fn {_, r} -> match?({:pass, _}, r) end)
-    fails = Enum.count(assigns.results, fn {_, r} -> match?({:fail, _}, r) end)
-    errors = Enum.count(assigns.results, fn {_, r} -> match?({:error, _}, r) end)
-    total = map_size(assigns.results)
+    evaluations = assigns.results.evaluations
+    passes = Enum.count(evaluations, fn {_, result} -> match?({:pass, _}, result) end)
+    fails = Enum.count(evaluations, fn {_, result} -> match?({:fail, _}, result) end)
+    errors = Enum.count(evaluations, fn {_, result} -> match?({:error, _}, result) end)
+    total = length(evaluations)
 
     assigns =
       assigns
+      |> assign(:evaluations, evaluations)
       |> assign(:passes, passes)
       |> assign(:fails, fails)
       |> assign(:errors, errors)
@@ -557,7 +559,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          <.result_card :for={{eval, result} <- @results} eval={eval} result={result} />
+          <.result_card :for={{eval, result} <- @evaluations} eval={eval} result={result} />
         </div>
       </div>
     </div>
