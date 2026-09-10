@@ -1,5 +1,5 @@
 # Authored outputs with ordinary deterministic assertions, no models or API keys.
-# 9/10 cases pass overall. Account safety passes 1/2, so its 80% gate fails.
+# 18/20 cases pass overall. Account safety passes 1/2, so its 80% gate fails.
 # Text checks illustrate batch mechanics, not semantic safety certification.
 
 - input: How do I reset my password?
@@ -75,3 +75,85 @@
     levenshtein:
       value: necessary
       max_distance: 0
+
+- input: Return only the order status, in uppercase.
+  actual_output: SHIPPED
+  metadata:
+    category: response-format
+  expected:
+    equals: SHIPPED
+
+- input: Explain how to find the return form in at least 40 characters.
+  actual_output: Open your account, choose the order, and select Start a return.
+  metadata:
+    category: response-format
+  expected:
+    min_length: 40
+    contains: Start a return
+
+- input: Write a delivery notification of at most 40 characters.
+  actual_output: Your order arrives tomorrow.
+  metadata:
+    category: response-format
+  expected:
+    max_length: 40
+
+- input: Return only a JSON object with a status of pending.
+  actual_output: '{"status":"pending"}'
+  metadata:
+    category: response-format
+  expected:
+    is_json: {}
+    contains: '"status":"pending"'
+
+- input: Give the support ticket ID in the format TKT followed by a dash and six digits.
+  actual_output: TKT-456789
+  metadata:
+    category: response-format
+  expected:
+    regex:
+      pattern: '^TKT-\d{6}$'
+    min_length: 10
+    max_length: 10
+
+- input: Write a return instruction in 6 to 12 words and mention the receipt.
+  actual_output: Bring your receipt and unopened item to the store.
+  metadata:
+    category: response-format
+  expected:
+    word_count:
+      min: 6
+      max: 12
+    contains: receipt
+
+- input: Use a Summary heading and end the response with Next step provided.
+  actual_output: 'Summary: Your return is eligible. Next step provided.'
+  metadata:
+    category: response-format
+  expected:
+    starts_with: 'Summary:'
+    ends_with: Next step provided.
+
+- input: State the required return documents without template placeholders.
+  actual_output: Bring your receipt and order number.
+  metadata:
+    category: response-format
+  expected:
+    contains_all: [receipt, order number]
+    not_contains: ['[NAME]', '[ORDER_ID]', TODO]
+
+- input: Give a support contact option in at most 80 characters.
+  actual_output: Contact support through live chat.
+  metadata:
+    category: response-format
+  expected:
+    contains_any: [live chat, support email]
+    max_length: 80
+
+- input: Return only a JSON object with a status of shipped, without explanation.
+  actual_output: 'Here is your result: {"status":"shipped"}'
+  metadata:
+    category: response-format
+  expected:
+    is_json: {}
+    contains: shipped

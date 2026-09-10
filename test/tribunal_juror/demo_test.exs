@@ -30,14 +30,15 @@ defmodule TribunalJuror.DemoTest do
                groups: %{by: group_field, pass_rate: policy.gates.groups.threshold}
              })
 
-    assert %{total: 10, passed: 9, errors: 0, pass_rate: 0.9, gate_status: :failed} =
+    assert %{total: 20, passed: 18, failed: 2, errors: 0, pass_rate: 0.9, gate_status: :failed} =
              report.summary
 
     assert %{passed_gate: true, pass_rate: 0.9} = report.gates.overall
 
     assert [
              %{value: "account-safety", passed: 1, total: 2, passed_gate: false},
-             %{value: "product-support", passed: 8, total: 8, passed_gate: true}
+             %{value: "product-support", passed: 8, total: 8, passed_gate: true},
+             %{value: "response-format", passed: 9, total: 10, passed_gate: true}
            ] = report.gates.groups.results
   end
 
@@ -62,11 +63,27 @@ defmodule TribunalJuror.DemoTest do
   test "migrated datasets have no unsupported assertions or list-valued contains" do
     judge_types = Tribunal.Judge.all_judge_names()
 
-    for path <- Path.wildcard(Path.join(@root, "test/evals/datasets/*.yaml")),
+    paths =
+      Path.wildcard(Path.join(@root, "test/evals/datasets/*.yaml")) ++
+        [Path.join(@demo_dir, "redteam-live.yaml")]
+
+    for path <- paths,
         {test_case, assertions} <- Dataset.load_with_assertions!(path) do
       for {type, opts} <- assertions do
         if type in judge_types do
-          assert type in [:faithful, :relevant, :refusal, :no_pii, :no_toxicity]
+          assert type in [
+                   :faithful,
+                   :relevant,
+                   :refusal,
+                   :no_pii,
+                   :no_toxicity,
+                   :no_policy_violation
+                 ]
+
+          if type == :no_policy_violation do
+            assert is_binary(opts[:policy]) and String.trim(opts[:policy]) != "",
+                   "Policy assertion requires an explicit policy in #{path}"
+          end
         else
           populated = %{
             test_case

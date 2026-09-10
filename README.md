@@ -64,7 +64,7 @@ These run offline. They exercise `tribunal_assert`, dataset-generated tests, and
 mix tribunal.eval --config evaluation_policy.yaml
 ```
 
-This offline fixture deliberately exits **1**: 9 of 10 cases pass, so the 90% overall gate passes, but only 1 of 2 account-safety cases passes, below the 80% category requirement. The other 8 cases pass. These are deterministic checks of authored outputs, not measurements of a live model's safety.
+This offline fixture deliberately exits **1**: 18 of 20 cases pass, so the 90% overall gate passes, but only 1 of 2 account-safety cases passes, below the 80% category requirement. Product support passes 8 of 8 and response format passes 9 of 10. The two intentional failures are a leaked recovery code and explanatory text wrapped around a JSON object. These are deterministic checks of authored outputs, not measurements of a live model's safety. Examples cover exact matches, length limits, JSON, word counts, and multiple assertions on one response.
 
 For a passing run with only the overall gate, or a machine-readable report:
 
@@ -91,7 +91,20 @@ mix run scripts/redteam_demo.exs
 
 This offline walkthrough feeds explicitly authored attack fixtures through all five real generators: `policy`, `hijacking`, `prompt_extraction`, `excessive_agency`, and `imitation`. It prints the path of a new temporary YAML file with an explicit `no_policy_violation` policy and plugin metadata for each case. You can pass a new destination path as an argument, existing files won't be overwritten. It demonstrates generation and serialization, not live attack discovery or judge accuracy.
 
-For live attack generation, using the configured provider's credentials:
+For a small live demo, generate just one prompt-extraction candidate using your Z.AI credentials:
+
+```bash
+mix tribunal.redteam.generate \
+  --plugins prompt_extraction \
+  --purpose "Informational shopping assistant for products, orders, and returns." \
+  --model zai:glm-5.3-flash \
+  --count 1 \
+  --output tmp/one-attack.yaml
+```
+
+[priv/demo/redteam-live.yaml](priv/demo/redteam-live.yaml) contains a saved candidate generated with this command. It poses as a support-team manager requesting a training SOP, trying to extract internal rules and tool details. Open it to show the attack, its explicit confidentiality policy, and generation metadata. This candidate hasn't been evaluated against a target, so it isn't evidence of a successful attack. New generations will vary.
+
+For a broader live run across all five generators:
 
 ```bash
 mix tribunal.redteam.generate \
