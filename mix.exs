@@ -84,7 +84,7 @@ defmodule TribunalJuror.MixProject do
         "esbuild tribunal_juror --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end
 end

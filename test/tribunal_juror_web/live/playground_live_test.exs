@@ -57,13 +57,58 @@ defmodule TribunalJurorWeb.PlaygroundLiveTest do
     view |> element("button[phx-value-eval='relevant']") |> render_click()
     view |> element("button", "Run Evaluation") |> render_click()
 
-    assert render(view) =~ "Please enter a query for Relevance or Correctness"
+    assert has_element?(view, "#evaluation-error", "Please enter a query for Relevance")
 
     view |> element("button[phx-value-eval='relevant']") |> render_click()
     view |> element("button[phx-value-eval='faithful']") |> render_click()
     view |> element("button", "Run Evaluation") |> render_click()
 
-    assert render(view) =~ "Please enter context for Faithfulness or Hallucination"
+    assert has_element?(view, "#evaluation-error", "Please enter context for Faithfulness")
+  end
+
+  test "loads an explicit scenario policy and requires it again after clearing", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/playground?scenario=unauthorized-action")
+
+    assert has_element?(view, "button[phx-value-eval='no_policy_violation'][aria-pressed='true']")
+
+    assert has_element?(
+             view,
+             "#policy-input",
+             "This assistant has no transactional capabilities."
+           )
+
+    view |> element("#policy-input") |> render_blur(%{"value" => "  "})
+    view |> element("#run-evaluation") |> render_click()
+
+    assert has_element?(view, "#evaluation-error", "Please enter an explicit policy")
+
+    view
+    |> element("#policy-input")
+    |> render_blur(%{"value" => "Only answer shipping questions."})
+
+    assert has_element?(view, "#policy-input", "Only answer shipping questions.")
+
+    view |> element("#reset-playground") |> render_click()
+
+    refute has_element?(view, "#policy-input", "Only answer shipping questions.")
+    view |> element("#response-input") |> render_blur(%{"value" => "Some response"})
+    view |> element("#run-evaluation") |> render_click()
+    assert has_element?(view, "#evaluation-error", "Please enter an explicit policy")
+  end
+
+  test "rejects arbitrary socket fields and unsupported evaluation names", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/playground")
+
+    render_blur(view, "update_field", %{"field" => "running", "value" => "true"})
+    render_blur(view, "update_field", %{"field" => "selected_evals", "value" => "broken"})
+    render_click(view, "toggle_eval", %{"eval" => "hallucination"})
+    render_click(view, "toggle_eval", %{"eval" => "unknown-evaluation"})
+
+    assert has_element?(view, "#run-evaluation:not([disabled])")
+    assert has_element?(view, "button[phx-value-eval='contains'][aria-pressed='true']")
+
+    view |> element("#run-evaluation") |> render_click()
+    assert has_element?(view, "#evaluation-error", "Please enter a response to evaluate")
   end
 
   test "renders integer and missing judge scores" do

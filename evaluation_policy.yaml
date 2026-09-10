@@ -1,0 +1,9 @@
+version: 1
+datasets:
+  - priv/demo/batch.yaml
+gates:
+  overall:
+    pass_rate: 0.9
+  groups:
+    by: category
+    pass_rate: 0.8

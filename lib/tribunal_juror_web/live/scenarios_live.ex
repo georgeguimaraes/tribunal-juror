@@ -22,12 +22,16 @@ defmodule TribunalJurorWeb.ScenariosLive do
 
   @impl true
   def handle_event("filter", %{"category" => category}, socket) do
-    category_atom = String.to_existing_atom(category)
+    case Enum.find(Scenarios.categories(), &(Atom.to_string(&1) == category)) do
+      nil ->
+        {:noreply, socket}
 
-    {:noreply,
-     socket
-     |> assign(:scenarios, Scenarios.by_category(category_atom))
-     |> assign(:filter, category_atom)}
+      category_atom ->
+        {:noreply,
+         socket
+         |> assign(:scenarios, Scenarios.by_category(category_atom))
+         |> assign(:filter, category_atom)}
+    end
   end
 
   @impl true
@@ -39,7 +43,8 @@ defmodule TribunalJurorWeb.ScenariosLive do
           <div>
             <h1 class="text-2xl font-bold">Pre-built Scenarios</h1>
             <p class="text-base-content/70">
-              Explore common evaluation patterns and edge cases
+              Explore common evaluation patterns and edge cases. Expected badges are examples,
+              not guarantees of a live judge's verdict.
             </p>
           </div>
           <div class="flex gap-2">
@@ -121,6 +126,13 @@ defmodule TribunalJurorWeb.ScenariosLive do
             </div>
           </div>
 
+          <div :if={Map.has_key?(@scenario.evaluation_opts, :no_policy_violation)}>
+            <div class="text-xs font-semibold text-base-content/50 uppercase mb-1">Policy</div>
+            <div class="text-sm bg-base-100 p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap font-mono">
+              {@scenario.evaluation_opts.no_policy_violation[:policy]}
+            </div>
+          </div>
+
           <div class="flex items-center justify-between">
             <div class="flex gap-1">
               <.expected_badge
@@ -129,12 +141,12 @@ defmodule TribunalJurorWeb.ScenariosLive do
                 expected={expected}
               />
             </div>
-            <a
-              href={"/playground?scenario=#{@scenario.id}"}
+            <.link
+              navigate={~p"/playground?scenario=#{@scenario.id}"}
               class="btn btn-primary btn-sm"
             >
               Try it <.icon name="hero-arrow-right" class="size-4" />
-            </a>
+            </.link>
           </div>
         </div>
       </div>
@@ -179,11 +191,13 @@ defmodule TribunalJurorWeb.ScenariosLive do
   defp category_bg(:safety), do: "bg-error/10"
   defp category_bg(:format), do: "bg-info/10"
   defp category_bg(:relevance), do: "bg-warning/10"
+  defp category_bg(:policy), do: "bg-secondary/10"
   defp category_bg(_), do: "bg-base-300"
 
   defp category_text(:faithfulness), do: "text-primary"
   defp category_text(:safety), do: "text-error"
   defp category_text(:format), do: "text-info"
   defp category_text(:relevance), do: "text-warning"
+  defp category_text(:policy), do: "text-secondary"
   defp category_text(_), do: "text-base-content"
 end

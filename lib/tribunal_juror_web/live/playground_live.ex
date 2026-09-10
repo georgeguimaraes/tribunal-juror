@@ -4,7 +4,16 @@ defmodule TribunalJurorWeb.PlaygroundLive do
   alias Tribunal.TestCase
 
   @deterministic_evals [:contains, :not_contains, :is_json, :regex]
-  @judge_evals [:faithful, :relevant, :hallucination, :correctness, :pii, :toxicity, :refusal]
+  @judge_evals [
+    :faithful,
+    :relevant,
+    :correctness,
+    :no_pii,
+    :no_toxicity,
+    :refusal,
+    :no_policy_violation
+  ]
+  @editable_fields ~w(context response query expected_output contains_value regex_value policy)
   @evaluation_timeout 45_000
 
   @impl true
@@ -17,6 +26,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
      |> assign(:expected_output, "")
      |> assign(:contains_value, "")
      |> assign(:regex_value, "")
+     |> assign(:policy, "")
      |> assign(:selected_evals, MapSet.new([:contains]))
      |> assign(:results, nil)
      |> assign(:running, false)
@@ -46,7 +56,8 @@ defmodule TribunalJurorWeb.PlaygroundLive do
              |> assign(:query, Map.get(scenario, :query, ""))
              |> assign(:expected_output, "")
              |> assign(:contains_value, evaluation_value(evaluation_opts, :contains))
-             |> assign(:regex_value, evaluation_value(evaluation_opts, :regex))
+             |> assign(:regex_value, evaluation_value(evaluation_opts, :regex, :pattern))
+             |> assign(:policy, evaluation_value(evaluation_opts, :no_policy_violation, :policy))
              |> assign(:selected_evals, MapSet.new(scenario.evaluations))
              |> assign(:results, nil)
              |> assign(:error, nil)}
@@ -58,23 +69,29 @@ defmodule TribunalJurorWeb.PlaygroundLive do
   end
 
   @impl true
-  def handle_event("update_field", %{"field" => field, "value" => value}, socket) do
+  def handle_event("update_field", %{"field" => field, "value" => value}, socket)
+      when field in @editable_fields and is_binary(value) do
     {:noreply, assign(socket, String.to_existing_atom(field), value)}
   end
 
+  def handle_event("update_field", _params, socket), do: {:noreply, socket}
+
   @impl true
   def handle_event("toggle_eval", %{"eval" => eval}, socket) do
-    eval_atom = String.to_existing_atom(eval)
-    selected = socket.assigns.selected_evals
+    case Enum.find(@deterministic_evals ++ @judge_evals, &(Atom.to_string(&1) == eval)) do
+      nil ->
+        {:noreply, socket}
 
-    selected =
-      if MapSet.member?(selected, eval_atom) do
-        MapSet.delete(selected, eval_atom)
-      else
-        MapSet.put(selected, eval_atom)
-      end
+      eval_atom ->
+        selected = socket.assigns.selected_evals
 
-    {:noreply, assign(socket, :selected_evals, selected)}
+        selected =
+          if MapSet.member?(selected, eval_atom),
+            do: MapSet.delete(selected, eval_atom),
+            else: MapSet.put(selected, eval_atom)
+
+        {:noreply, assign(socket, :selected_evals, selected)}
+    end
   end
 
   @impl true
@@ -86,6 +103,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
       expected_output: expected_output,
       contains_value: contains_value,
       regex_value: regex_value,
+      policy: policy,
       selected_evals: evals
     } = socket.assigns
 
@@ -96,6 +114,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
            expected_output,
            contains_value,
            regex_value,
+           policy,
            evals
          ) do
       :ok ->
@@ -111,7 +130,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
           context: blank_to_nil(context)
         }
 
-        assertions = build_assertions(evals, query, contains_value, regex_value)
+        assertions = build_assertions(evals, query, contains_value, regex_value, policy)
 
         {:noreply,
          socket
@@ -140,6 +159,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
      |> assign(:expected_output, "")
      |> assign(:contains_value, "")
      |> assign(:regex_value, "")
+     |> assign(:policy, "")
      |> assign(:results, nil)
      |> assign(:error, nil)}
   end
@@ -192,6 +212,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
          expected_output,
          contains_value,
          regex_value,
+         policy,
          evals
        ) do
     cond do
@@ -210,11 +231,14 @@ defmodule TribunalJurorWeb.PlaygroundLive do
       MapSet.member?(evals, :correctness) and String.trim(expected_output) == "" ->
         {:error, "Please enter an expected answer for Correctness"}
 
-      selected?(evals, [:relevant, :correctness]) and String.trim(query) == "" ->
-        {:error, "Please enter a query for Relevance or Correctness"}
+      MapSet.member?(evals, :relevant) and String.trim(query) == "" ->
+        {:error, "Please enter a query for Relevance"}
 
-      selected?(evals, [:faithful, :hallucination]) and String.trim(context) == "" ->
-        {:error, "Please enter context for Faithfulness or Hallucination"}
+      MapSet.member?(evals, :faithful) and String.trim(context) == "" ->
+        {:error, "Please enter context for Faithfulness"}
+
+      MapSet.member?(evals, :no_policy_violation) and String.trim(policy) == "" ->
+        {:error, "Please enter an explicit policy for No Policy Violation"}
 
       true ->
         :ok
@@ -223,28 +247,32 @@ defmodule TribunalJurorWeb.PlaygroundLive do
 
   defp selected?(evals, names), do: Enum.any?(names, &MapSet.member?(evals, &1))
 
-  defp build_assertions(evals, query, contains_value, regex_value) do
+  defp build_assertions(evals, query, contains_value, regex_value, policy) do
     Enum.map(evals, fn eval ->
-      {eval, build_opts(eval, query, contains_value, regex_value)}
+      {eval, build_opts(eval, query, contains_value, regex_value, policy)}
     end)
   end
 
-  defp build_opts(eval, _query, contains_value, _regex_value)
+  defp build_opts(eval, _query, contains_value, _regex_value, _policy)
        when eval in [:contains, :not_contains],
        do: [value: contains_value]
 
-  defp build_opts(:regex, _query, _contains_value, regex_value), do: [pattern: regex_value]
+  defp build_opts(:regex, _query, _contains_value, regex_value, _policy),
+    do: [pattern: regex_value]
 
-  defp build_opts(eval, query, _contains_value, _regex_value)
+  defp build_opts(eval, query, _contains_value, _regex_value, _policy)
        when eval in [:relevant, :correctness],
        do: [query: query]
 
-  defp build_opts(_eval, _query, _contains_value, _regex_value), do: []
+  defp build_opts(:no_policy_violation, _query, _contains_value, _regex_value, policy),
+    do: [policy: policy]
 
-  defp evaluation_value(opts, eval) do
+  defp build_opts(_eval, _query, _contains_value, _regex_value, _policy), do: []
+
+  defp evaluation_value(opts, eval, key \\ :value) do
     opts
     |> Map.get(eval, [])
-    |> Keyword.get(:value, "")
+    |> Keyword.get(key, "")
   end
 
   defp blank_to_nil(value) do
@@ -292,6 +320,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
             </p>
           </div>
           <button
+            id="reset-playground"
             type="button"
             phx-click="clear"
             class="btn btn-ghost btn-sm gap-2 opacity-70 hover:opacity-100"
@@ -364,6 +393,29 @@ defmodule TribunalJurorWeb.PlaygroundLive do
                   phx-blur="update_field"
                   phx-value-field="expected_output"
                 >{@expected_output}</textarea>
+              </div>
+            </div>
+
+            <div
+              :if={MapSet.member?(@selected_evals, :no_policy_violation)}
+              class="card bg-base-200 shadow-sm"
+            >
+              <div class="card-body p-5">
+                <.input
+                  id="policy-input"
+                  name="policy"
+                  type="textarea"
+                  label="Explicit policy"
+                  value={@policy}
+                  class="textarea bg-base-100 border-base-300 w-full h-40 font-mono text-sm leading-relaxed resize-y focus:border-primary"
+                  placeholder="Define allowed scope, private information, and authorized actions. Include any exceptions."
+                  phx-blur="update_field"
+                  phx-value-field="policy"
+                />
+                <p class="text-xs text-base-content/60">
+                  Required for No Policy Violation. The judge checks the response against these
+                  rules. A text verdict cannot verify whether an external action actually happened.
+                </p>
               </div>
             </div>
 
@@ -460,10 +512,15 @@ defmodule TribunalJurorWeb.PlaygroundLive do
                     selected={@selected_evals}
                   />
                 </div>
+                <p class="mt-3 text-xs text-base-content/60">
+                  No PII, No Toxicity, and No Policy Violation pass when the unwanted condition
+                  is absent. Faithful checks whether the response is supported by context.
+                </p>
               </div>
             </div>
 
             <button
+              id="run-evaluation"
               type="button"
               phx-click="run_evaluation"
               class="btn btn-primary w-full btn-lg shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow"
@@ -493,7 +550,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
       type="button"
       phx-click="toggle_eval"
       phx-value-eval={@eval}
-      aria-pressed={MapSet.member?(@selected, @eval)}
+      aria-pressed={to_string(MapSet.member?(@selected, @eval))}
       class={[
         "px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150",
         if(MapSet.member?(@selected, @eval),
@@ -511,7 +568,7 @@ defmodule TribunalJurorWeb.PlaygroundLive do
 
   defp error_alert(assigns) do
     ~H"""
-    <div class="alert alert-error">
+    <div id="evaluation-error" class="alert alert-error">
       <.icon name="hero-exclamation-circle" class="size-5" />
       <span>{@message}</span>
     </div>

@@ -43,17 +43,21 @@ defmodule TribunalJurorWeb.HomeLive do
           <.feature_card
             icon="hero-cpu-chip"
             title="LLM-as-Judge"
-            description="Faithfulness, relevance, hallucination detection, toxicity, bias checks."
+            description="Faithfulness, relevance, correctness, refusal, privacy, toxicity, and explicit policies."
           />
           <.feature_card
             icon="hero-arrows-right-left"
             title="Embeddings"
-            description="Semantic similarity comparison using vector embeddings."
+            description="Semantic similarity using local embeddings via alike, without a remote LLM judge."
           />
         </section>
 
         <section class="card bg-base-200 p-8">
-          <h2 class="text-2xl font-bold mb-6">Available Assertions</h2>
+          <h2 class="text-2xl font-bold mb-2">Evaluation Keys</h2>
+          <p class="text-sm text-base-content/70 mb-6">
+            These keys work in datasets and Tribunal.evaluate. For simple ExUnit checks, use
+            native assertions. No-prefixed keys pass when the unwanted condition is absent.
+          </p>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
               <h3 class="font-semibold text-primary mb-3 flex items-center gap-2">
@@ -62,7 +66,7 @@ defmodule TribunalJurorWeb.HomeLive do
               <ul class="space-y-1 text-sm text-base-content/80">
                 <li>
                   <code class="text-xs bg-base-300 px-1 rounded">contains</code>
-                  - Output includes substring(s)
+                  - Output includes one substring
                 </li>
                 <li>
                   <code class="text-xs bg-base-300 px-1 rounded">regex</code> - Output matches pattern
@@ -71,7 +75,8 @@ defmodule TribunalJurorWeb.HomeLive do
                   <code class="text-xs bg-base-300 px-1 rounded">is_json</code> - Valid JSON output
                 </li>
                 <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">max_tokens</code> - Token limit
+                  <code class="text-xs bg-base-300 px-1 rounded">contains_all</code>
+                  - Includes every listed substring
                 </li>
                 <li>
                   <code class="text-xs bg-base-300 px-1 rounded">levenshtein</code> - Edit distance
@@ -90,23 +95,19 @@ defmodule TribunalJurorWeb.HomeLive do
                   <code class="text-xs bg-base-300 px-1 rounded">relevant</code> - Addresses query
                 </li>
                 <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">hallucination</code>
-                  - Fabricated info
-                </li>
-                <li>
                   <code class="text-xs bg-base-300 px-1 rounded">correctness</code> - Matches expected
                 </li>
                 <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">pii</code> - Personal info detection
+                  <code class="text-xs bg-base-300 px-1 rounded">no_pii</code>
+                  - No personal info exposure
                 </li>
                 <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">toxicity</code> - Harmful content
+                  <code class="text-xs bg-base-300 px-1 rounded">no_toxicity</code>
+                  - No abusive or harmful content
                 </li>
                 <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">bias</code> - Biased statements
-                </li>
-                <li>
-                  <code class="text-xs bg-base-300 px-1 rounded">jailbreak</code> - Attack detection
+                  <code class="text-xs bg-base-300 px-1 rounded">no_policy_violation</code>
+                  - Follows your explicit rules
                 </li>
                 <li>
                   <code class="text-xs bg-base-300 px-1 rounded">refusal</code> - Detects refusals
@@ -123,7 +124,9 @@ defmodule TribunalJurorWeb.HomeLive do
                 </li>
               </ul>
               <p class="text-xs text-base-content/60 mt-4">
-                Requires <code class="bg-base-300 px-1 rounded">alike</code> dependency
+                Requires the optional <code class="bg-base-300 px-1 rounded">alike</code>
+                dependency, which is not installed in this showcase. First use may download
+                the model. Similarity does not guarantee factual correctness.
               </p>
             </div>
           </div>
@@ -141,10 +144,35 @@ defmodule TribunalJurorWeb.HomeLive do
             <pre data-prefix="7"><code>  test "response is grounded in context" do</code></pre>
             <pre data-prefix="8"><code>    response = MyApp.RAG.query("What's the return policy?")</code></pre>
             <pre data-prefix="9"><code></code></pre>
-            <pre data-prefix="10"><code>    assert_contains response, "30 days"</code></pre>
+            <pre data-prefix="10"><code>    assert response =~ "30 days"</code></pre>
             <pre data-prefix="11"><code>    assert_faithful response, context: @docs, threshold: 0.8</code></pre>
             <pre data-prefix="12"><code>  end</code></pre>
             <pre data-prefix="13"><code>end</code></pre>
+          </div>
+        </section>
+
+        <section id="cli-demos" class="card bg-base-200 p-8 space-y-4">
+          <h2 class="text-2xl font-bold">From one response to a whole batch</h2>
+          <p class="text-base-content/70">
+            The playground grades a pasted response. Use the ExUnit/provider examples for
+            fresh calls and repeated sampling, and the Mix demos for batch gates and
+            red-team case generation.
+          </p>
+          <div class="space-y-3 text-sm">
+            <p>
+              <code class="bg-base-300 px-2 py-1 rounded">mix tribunal.eval --config evaluation_policy.yaml</code>
+              runs the deterministic batch-gate demo. Assertion thresholds grade attempts,
+              sampling combines attempts into cases, and gates grade the complete batch.
+            </p>
+            <p>
+              <code class="bg-base-300 px-2 py-1 rounded">mix run scripts/redteam_demo.exs</code>
+              generates attack cases with explicit policies. The five generators cover policy
+              violations, scope drift, prompt extraction, excessive agency, and imitation.
+            </p>
+            <p>
+              See the repository README for expected results and live-model options. Offline
+              demo results demonstrate the pipeline and do not measure a model's safety.
+            </p>
           </div>
         </section>
       </div>
