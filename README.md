@@ -41,7 +41,7 @@ The sample agent used by `mix tribunal.eval` stays on GLM-4.7 so the system bein
 
 The offline demos below need no API key. Live judge and agent runs require credentials and can produce different results between runs.
 
-## Presentation walkthrough
+## Feature walkthrough
 
 ### 1. Explore assertions in the browser
 
@@ -58,7 +58,9 @@ mix test
 
 These run offline. They exercise `tribunal_assert`, dataset-generated tests, and repeated callbacks. ExUnit requires every test to pass.
 
-### 3. Show why batch gates are separate
+Failed assertion macros show the judge's reason once through ExUnit, even with `verbose: true`. Optional verbose logs for passing assertions are unchanged. Structured evaluation results retain scores and verdicts.
+
+### 3. Evaluate overall and category gates
 
 ```bash
 mix tribunal.eval --config evaluation_policy.yaml
@@ -74,6 +76,8 @@ mix tribunal.eval --config evaluation_policy.yaml --format json --output tmp/bat
 ```
 
 The JSON command still exits 1 because the category gate fails. `evaluation_policy.yaml` owns the batch requirements. Each dataset row owns its assertions and category metadata.
+
+The task prints live completed-attempt progress to stderr, starting at `0/20` for this batch. With repeated sampling, the total is cases multiplied by repeats. Concurrent attempts update progress as they finish, while the final report keeps dataset order. Loading messages and progress stay separate from reports written to stdout or `--output`.
 
 | Layer | Decision |
 |---|---|
@@ -91,7 +95,7 @@ mix run scripts/redteam_demo.exs
 
 This offline walkthrough feeds explicitly authored attack fixtures through all five real generators: `policy`, `hijacking`, `prompt_extraction`, `excessive_agency`, and `imitation`. It prints the path of a new temporary YAML file with an explicit `no_policy_violation` policy and plugin metadata for each case. You can pass a new destination path as an argument, existing files won't be overwritten. It demonstrates generation and serialization, not live attack discovery or judge accuracy.
 
-For a small live demo, generate just one prompt-extraction candidate using your Z.AI credentials:
+For a small live run, generate just one prompt-extraction candidate using your Z.AI credentials:
 
 ```bash
 mix tribunal.redteam.generate \
@@ -102,7 +106,7 @@ mix tribunal.redteam.generate \
   --output tmp/one-attack.yaml
 ```
 
-[priv/demo/redteam-live.yaml](priv/demo/redteam-live.yaml) contains a saved candidate generated with this command. It poses as a support-team manager requesting a training SOP, trying to extract internal rules and tool details. Open it to show the attack, its explicit confidentiality policy, and generation metadata. This candidate hasn't been evaluated against a target, so it isn't evidence of a successful attack. New generations will vary.
+[priv/demo/redteam-live.yaml](priv/demo/redteam-live.yaml) contains a saved candidate generated with this command. It poses as a support-team manager requesting a training SOP, trying to extract internal rules and tool details. Inspect it for the attack, its explicit confidentiality policy, and generation metadata. This candidate hasn't been evaluated against a target, so it isn't evidence of a successful attack. New generations will vary.
 
 For a broader live run across all five generators:
 
@@ -201,7 +205,7 @@ The app includes pre-built scenarios across these categories:
 | Format | JSON Validation |
 | Relevance | Off-Topic Answer |
 
-Explicit policy scenarios also demonstrate staying in scope, protecting private information, and avoiding unsupported action claims. The larger YAML suites under `test/evals/datasets` include live judge checks and intentionally failing outputs, so their pass rates aren't fixed presentation expectations.
+Explicit policy scenarios also demonstrate staying in scope, protecting private information, and avoiding unsupported action claims. The larger YAML suites under `test/evals/datasets` include live judge checks and intentionally failing outputs, so pass rates can vary between runs.
 
 ## Learn More
 
