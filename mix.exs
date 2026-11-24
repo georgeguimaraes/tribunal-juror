@@ -60,7 +60,7 @@ defmodule TribunalJuror.MixProject do
       {:gettext, "~> 1.0.2"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.3.0"},
-      {:bandit, "~> 1.12.5"},
+      {:bandit, "~> 1.15.0"},
 
       # Tribunal LLM evaluation
       {:tribunal, github: "georgeguimaraes/tribunal"},
